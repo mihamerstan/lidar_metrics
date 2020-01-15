@@ -95,13 +95,13 @@ class PulseWaves(object):
                 vlr.record.print_table()
             elif vlr.record_id == 34736:
                 vlr.record = struct.unpack("d"*int(vlr.record_length/8), pulsebinary.read(vlr.record_length))
+                #vlr.record = GeoDoubleParams(pulsebinary)
             elif vlr.record_id == 34737:
                 vlr.record = pulsebinary.read(vlr.record_length)
 
             #if VLR not a scanner or pulse descriptor just read data but do not parse
             #TODO: add additional vlr types                        
             else:        
-                #vlr.record=	"".join(struct.unpack("c"*vlr.record_length, pulsebinary.read(vlr.record_length))).strip("\x00")
                 vlr.record = pulsebinary.read(vlr.record_length)
             #add vlr to the vlrs dictionary
             self.vlrs[vlr.record_id] = vlr
@@ -476,26 +476,62 @@ class GeoKeyDirectory(object):
     
     def __init__(self,pulsebinary):     
         
-        self.w_key_directory_version = struct.unpack("H", pulsebinary.read(2))[0]
-        self.w_key_revision = struct.unpack("H", pulsebinary.read(2))[0]
-        self.w_minor_revision = struct.unpack("H", pulsebinary.read(2))[0]
-        self.w_number_of_keys = struct.unpack("H", pulsebinary.read(2))[0]
-        self.key_length = 4*self.w_number_of_keys
+        self.key_directory_version = struct.unpack("H", pulsebinary.read(2))[0]
+        self.key_revision = struct.unpack("H", pulsebinary.read(2))[0]
+        self.minor_revision = struct.unpack("H", pulsebinary.read(2))[0]
+        self.number_of_keys = struct.unpack("H", pulsebinary.read(2))[0]
+        self.key_length = 4*self.number_of_keys
         self.key_entry = struct.unpack("H"*self.key_length, pulsebinary.read(2*self.key_length))
+        self.key_entry_dict = {}
+        for key_num in range(self.number_of_keys):
+            key = GeoKey(self.key_entry,key_num)
+            self.key_entry_dict[key.key_id] = key
 
     def print_table(self):
         print("self.key_entry type: ",type(self.key_entry))
         for key, value in sorted(self.__dict__.items()):
             if type(value) == dict:
-                print("{:<20} {:<15}".format(key, list(value.keys())))    
+                #print("{:<20} {:<15}".format(key, value.keys()))    
+                print("{:<20} {:<15}".format(key, len(value)))    
             elif type(value) == tuple:
                 print("{0} {1}".format(key, value))   
             elif type(value) != dict:
                 print("{:<20} {:<15}".format(key, value))
+
+class GeoKey(object):
+
+    def __init__(self,key_entry,key_num):
+
+        key_offset = (key_num)*4
+        key_bytes = key_entry[key_offset:(key_offset+4)]
+        self.key_id = key_bytes[0]
+        self.tiff_tag_location = key_bytes[1]
+        self.count = key_bytes[2]
+        self.value_offset = key_bytes[3]
+
+    def __str__(self):
+        #return "key_id: %s, tiff_tag_location: %s, count: %s, value_offset: %s" % (self.key_id,self.tiff_tag_location,self.count,self.value_offset)
+        return self.key_id    
+'''class GeoDoubleParams(object):
+        
+        def __init__(self,pulsebinary):     
             
-
-
-
+            self.key_directory_version = struct.unpack("H", pulsebinary.read(2))[0]
+            self.key_revision = struct.unpack("H", pulsebinary.read(2))[0]
+            self.minor_revision = struct.unpack("H", pulsebinary.read(2))[0]
+            self.number_of_keys = struct.unpack("H", pulsebinary.read(2))[0]
+            self.key_length = 4*self.number_of_keys
+            self.key_entry = struct.unpack("H"*self.key_length, pulsebinary.read(2*self.key_length))
     
+        def print_table(self):
+            print("self.key_entry type: ",type(self.key_entry))
+            for key, value in sorted(self.__dict__.items()):
+                if type(value) == dict:
+                    print("{:<20} {:<15}".format(key, list(value.keys())))    
+                elif type(value) == tuple:
+                    print("{0} {1}".format(key, value))   
+                elif type(value) != dict:
+                    print("{:<20} {:<15}".format(key, value))
+    '''    
     
     
