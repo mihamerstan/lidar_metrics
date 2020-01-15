@@ -1,5 +1,5 @@
 # lidar_fwf
-Tools for full waveform lidar processing.
+Python3 tools for full waveform lidar processing.  Based on pypwaves (see below) but ported to python 3 and expanded to cover more of the Pulsewaves spec.
 
 # Resources:
 Pulsewaves specification: https://github.com/PulseWaves/Specification/blob/master/specification.rst
