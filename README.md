@@ -11,6 +11,8 @@ https://github.com/adamchlus/pypwaves
 Laspy - LAS file library, doesn't seem to support FWF issues.
 Laspy documentation: https://pythonhosted.org/laspy/laspy_tools.html
 
-Python structs documentation: https://docs.python.org/2/library/struct.html
-
 Installing laszip: https://stackoverflow.com/questions/49500149/laspy-cannot-find-laszip-when-is-installed-from-source-laszip-is-in-path
+
+Geo-references for Brooklyn LiDAR run:
+NAD83: https://spatialreference.org/ref/epsg/nad83-new-york-long-island-ftus/
+NAVD 88: https://en.wikipedia.org/wiki/North_American_Vertical_Datum_of_1988
