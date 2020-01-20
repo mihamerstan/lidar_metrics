@@ -67,7 +67,7 @@ class PulseWaves(object):
 
         #read variable length records (VLR)
         for num_vlr in range(self.num_vlr):
-            
+            #print("VLR count: ",num_vlr)
             vlr = VLR(pulsebinary)
             #print("vlr.record_id: ",vlr.record_id)
 
@@ -86,14 +86,16 @@ class PulseWaves(object):
             
 
             # Adding additional vlr types
+            elif vlr.record_id >=300001 and vlr.record_id < 300255:
+                vlr.record = Table(pulsebinary,vlr.record_length)
             
             # GeoTIFF VLR types
             elif vlr.record_id == 34735:
                 vlr.record = GeoKeyDirectory(pulsebinary)
-                #vlr.record.print_table()
+
             elif vlr.record_id == 34736:
                 vlr.record = struct.unpack("d"*int(vlr.record_length/8), pulsebinary.read(vlr.record_length))
-                #vlr.record = GeoDoubleParams(pulsebinary)
+
             elif vlr.record_id == 34737:
                 vlr.record = pulsebinary.read(vlr.record_length)
 
@@ -403,6 +405,7 @@ class VLR(object):
         self.reserved =	struct.unpack("I", pulsebinary.read(4))[0]
         self.record_length =	struct.unpack("q", pulsebinary.read(8))[0]
         self.desciption = pulsebinary.read(64).decode("utf-8").strip("\x00").strip("\x00")
+        print("VLR record length: ",self.record_length)
 
     def print_table(self):
         for key, value in sorted(self.__dict__.items()):
@@ -493,6 +496,56 @@ class PulseDecriptor(object):
             elif type(value) == dict:
                 print("{:<20} {:<15}".format(key, list(value.keys())))
 
+class Table(object):
+
+    def __init__(self,pulsebinary,vlr_length):  
+        #self.size = struct.unpack("L", pulsebinary.read(4))[0]
+        self.size = struct.unpack("I", pulsebinary.read(4))[0]
+        print("Table size: ",self.size)
+        self.reserved = struct.unpack("I", pulsebinary.read(4))[0]
+        self.num_tables = struct.unpack("I", pulsebinary.read(4))[0]
+        self.description = pulsebinary.read(64)  #.decode("utf-8").strip("\x00").strip("\x00")
+
+        self.table_dict = {}
+        table_offset = 0
+        for table_num in range(self.num_tables):
+            lut = LookupTable(pulsebinary,table_offset,vlr_length)
+            table_offset += lut.size
+            self.table_dict[table_num] = lut
+
+    def print_table(self):
+        for key, value in sorted(self.__dict__.items()):
+            if type(value) == dict:
+                #print("{:<20} {:<15}".format(key, value.keys()))    
+                print("{:<20} {:<15}".format(key, len(value)))    
+            elif type(value) == tuple:
+                print("{0} {1}".format(key, value))   
+            elif type(value) == dict:
+                pass
+
+class LookupTable(object):
+
+    def __init__(self,pulsebinary,table_offset,vlr_length):
+
+        self.size = struct.unpack("I", pulsebinary.read(4))[0]
+        print("LookupTable size: ",self.size)
+        self.reserved = struct.unpack("I", pulsebinary.read(4))[0]
+        self.num_entries = struct.unpack("I", pulsebinary.read(4))[0]
+        self.unit_measure = struct.unpack("H", pulsebinary.read(2))[0]
+        self.data_type = pulsebinary.read(1)
+        self.options = pulsebinary.read(1)
+        self.compression = struct.unpack("I", pulsebinary.read(4))[0]
+        table_size = vlr_length - 76 - (4+4+4+2+1+1+4+64)
+        print("Inner table size: ",table_size)
+        print("num_entries: ",self.num_entries)
+        self.full_table = pulsebinary.read(table_size) #TODO: parse this into entries
+        self.description = pulsebinary.read(64)
+
+    def __str__(self):
+        #return "key_id: %s, tiff_tag_location: %s, count: %s, value_offset: %s" % (self.key_id,self.tiff_tag_location,self.count,self.value_offset)
+        return "key_id: %s, value: %s" % (self.key_id, self.value)
+
+
 class GeoKeyDirectory(object):
     
     def __init__(self,pulsebinary):     
@@ -533,26 +586,3 @@ class GeoKey(object):
     def __str__(self):
         #return "key_id: %s, tiff_tag_location: %s, count: %s, value_offset: %s" % (self.key_id,self.tiff_tag_location,self.count,self.value_offset)
         return "key_id: %s, value: %s" % (self.key_id, self.value)
-'''class GeoDoubleParams(object):
-        
-        def __init__(self,pulsebinary):     
-            
-            self.key_directory_version = struct.unpack("H", pulsebinary.read(2))[0]
-            self.key_revision = struct.unpack("H", pulsebinary.read(2))[0]
-            self.minor_revision = struct.unpack("H", pulsebinary.read(2))[0]
-            self.number_of_keys = struct.unpack("H", pulsebinary.read(2))[0]
-            self.key_length = 4*self.number_of_keys
-            self.key_entry = struct.unpack("H"*self.key_length, pulsebinary.read(2*self.key_length))
-    
-        def print_table(self):
-            print("self.key_entry type: ",type(self.key_entry))
-            for key, value in sorted(self.__dict__.items()):
-                if type(value) == dict:
-                    print("{:<20} {:<15}".format(key, list(value.keys())))    
-                elif type(value) == tuple:
-                    print("{0} {1}".format(key, value))   
-                elif type(value) != dict:
-                    print("{:<20} {:<15}".format(key, value))
-    '''    
-    
-    
