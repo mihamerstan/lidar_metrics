@@ -293,11 +293,38 @@ class PulseRecord(object):
         
 
     def print_table(self):
-        for key, value in sorted(self.__dict__.items()):
-            if type(value) != dict:
-                print("{:<20} {:<15}".format(key, value))
-            elif type(value) == dict:
-                print("{:<20} {:<15}".format(key, list(value.keys())))
+        pulse_record_attrs = ['gps_timestamp', 
+                                'offset_to_waves', 
+                                'x_anchor', 
+                                'y_anchor', 
+                                'z_anchor', 
+                                'x_target', 
+                                'y_target', 
+                                'z_target', 
+                                'first_return', 
+                                'last_return', 
+                                'pulse_number', 
+                                'pulse_descriptor', 
+                                'reserved', 
+                                'edge', 
+                                'scan_direction', 
+                                'facet', 
+                                'intensity', 
+                                'classification', 
+                                'dx', 
+                                'dy', 
+                                'dz']
+        for attr in pulse_record_attrs:
+            print(attr,": ",getattr(self,attr))
+        '''for key, value in sorted(self.__dict__.items()):
+                                    if type(value) == tuple:
+                                        print(key, value)   
+                                    elif type(value) == list:
+                                        print(key, value)
+                                    elif type(value) == dict:
+                                        print("{:<20} {:<15}".format(key, list(value.keys())))
+                                    else:
+                                        print("{:<20} {:<15}".format(key, value))'''
           
         
 class Waves(object):
@@ -405,7 +432,7 @@ class VLR(object):
         self.reserved =	struct.unpack("I", pulsebinary.read(4))[0]
         self.record_length =	struct.unpack("q", pulsebinary.read(8))[0]
         self.desciption = pulsebinary.read(64).decode("utf-8").strip("\x00").strip("\x00")
-        print("VLR record length: ",self.record_length)
+        #print("VLR record length: ",self.record_length)
 
     def print_table(self):
         for key, value in sorted(self.__dict__.items()):
@@ -501,7 +528,6 @@ class Table(object):
     def __init__(self,pulsebinary,vlr_length):  
         #self.size = struct.unpack("L", pulsebinary.read(4))[0]
         self.size = struct.unpack("I", pulsebinary.read(4))[0]
-        print("Table size: ",self.size)
         self.reserved = struct.unpack("I", pulsebinary.read(4))[0]
         self.num_tables = struct.unpack("I", pulsebinary.read(4))[0]
         self.description = pulsebinary.read(64)  #.decode("utf-8").strip("\x00").strip("\x00")
@@ -520,7 +546,7 @@ class Table(object):
                 print("{:<20} {:<15}".format(key, len(value)))    
             elif type(value) == tuple:
                 print("{0} {1}".format(key, value))   
-            elif type(value) == dict:
+            elif (type(value) != dict) and (type(value) != tuple):
                 pass
 
 class LookupTable(object):
@@ -528,7 +554,6 @@ class LookupTable(object):
     def __init__(self,pulsebinary,table_offset,vlr_length):
 
         self.size = struct.unpack("I", pulsebinary.read(4))[0]
-        print("LookupTable size: ",self.size)
         self.reserved = struct.unpack("I", pulsebinary.read(4))[0]
         self.num_entries = struct.unpack("I", pulsebinary.read(4))[0]
         self.unit_measure = struct.unpack("H", pulsebinary.read(2))[0]
@@ -536,8 +561,8 @@ class LookupTable(object):
         self.options = pulsebinary.read(1)
         self.compression = struct.unpack("I", pulsebinary.read(4))[0]
         table_size = vlr_length - 76 - (4+4+4+2+1+1+4+64)
-        print("Inner table size: ",table_size)
-        print("num_entries: ",self.num_entries)
+#        print("Inner table size: ",table_size)
+#        print("num_entries: ",self.num_entries)
         self.full_table = pulsebinary.read(table_size) #TODO: parse this into entries
         self.description = pulsebinary.read(64)
 
