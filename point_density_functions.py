@@ -83,7 +83,6 @@ def grab_points(pt_files,file_dir,pt_x,pt_y,feet_from_point):
     return square_points
 
 
-# fit a plane to square_points via SVD
 def plane_fit(square_points):
     '''
     Fits a plane via SVD to the provided points.
@@ -107,7 +106,7 @@ def plane_fit(square_points):
     proj_on_norm = dist_from_plane*np.array([norm_vector]).T
     pts_on_plane = points - proj_on_norm.T
     
-    square_points['dist_from_plane'] = dist_from_plane
+    square_points.loc['dist_from_plane'] = dist_from_plane
     
     return norm_vector,points,square_points,pts_on_plane
 
@@ -179,3 +178,18 @@ def vertical_point_density(square_points,norm_vector,wall_pt,feet_from_pt):
                                          (square_points['z_plot']>wall_pt_z-feet_from_pt)]
     density = vertical_square.shape[0]/((feet_from_pt*2)**2)
     print("Vertical density: {:2.3f} pts/sqft".format(density))
+
+
+def label_returns(las_df):
+    '''
+    Parses the flag_byte into number of returns and return number, adds these fields to las_df.
+    Input - las_df - dataframe from .laz or .lz file
+    Output - first_return_df - only the first return points from las_df.
+           - las_df - input dataframe with num_returns and return_num fields added 
+    '''
+    
+    las_df['num_returns'] = np.floor(las_df['flag_byte']/16).astype(int)
+    las_df['return_num'] = las_df['flag_byte']%16
+    first_return_df = las_df[las_df['return_num']==1]
+    first_return_df = first_return_df.reset_index(drop=True)
+    return first_return_df, las_df
