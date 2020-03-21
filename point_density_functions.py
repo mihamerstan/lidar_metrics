@@ -82,6 +82,32 @@ def grab_points(pt_files,file_dir,pt_x,pt_y,feet_from_point):
     print("Point density: {:2.2f} points / sq ft".format(square_points.shape[0]/size_of_square))
     return square_points
 
+def grab_points_big_rect(pt_files,file_dir,uv_inv,w):
+    '''
+    Function extracts all points in all pt_files within feet_from_point of (pt_x,pt_y)
+    Inputs:
+        pt_files - List of strings, filenames of .lz files (created by create_df_hd5 function)
+        file_dir - String, directory name containing pt_files
+        pt_x,pt_y - Float, X and Y coordinate of the center point of the desired output
+        feet_from_point - Float, how many feet in each coordinate direction to allow
+        
+    Output:
+        square_points - DataFrame, contains only points within the bounds described, full LAS fields
+    '''
+    rectangle_points = pd.DataFrame()
+    for pick in pt_files:
+        las_points = pd.read_hdf(file_dir+pick)
+        las_points['flight_id'] = pick[11:-3]
+        unit_square = (las_points[['x_scaled','y_scaled']]-w)@(uv_inv.T)
+        new_rectangle_points = las_points[(unit_square[0]<=1) & (unit_square[0]>=0) & (unit_square[1]<=1) & (unit_square[1]>=0)]
+        print("Point count in new square from {:s}: {:d}".format(pick,new_rectangle_points.shape[0]))
+        #pts_from_scan.append((pick,new_square_points.shape[0]))
+        rectangle_points = rectangle_points.append(new_rectangle_points,sort=True)
+
+    print("Total point count in square: {:d}".format(rectangle_points.shape[0]))
+    return rectangle_points
+
+
 
 def plane_fit(square_points):
     '''
