@@ -46,7 +46,7 @@ def create_df_hd5(file_dir,filename,column_names):
     raw = inFile.get_points()
     df = raw_to_df(raw,column_names)
     df = scale_and_offset(df,inFile.header,append_to_df=True)
-    hdf_name = 'las_points_'+filename[34:40]+'.lz'
+    hdf_name = 'las_points_'+filename[9:-4]+'.lz'
     df.to_hdf(file_dir + hdf_name,key='df',complevel=1,complib='lzo')
 #    return df
 
@@ -227,7 +227,8 @@ def in_vertical_square(square_points,norm_vector,center_pt,horizontal_feet_from_
         center_pt - 3-tuple of xyz point, center of rectangle
         feet_from_pt - float, how many feet in each coordinate direction to allow
     Output:
-        Prints vertical density
+        vertical_square - DataFrame containing the points within the rectangle, same format as square_points input
+        density - scalar point density per sq ft for the rectangle
     '''
     xy_vector = np.array([-norm_vector[1],norm_vector[0]])
     xy_vector = xy_vector / np.linalg.norm(xy_vector) # Norm to 1
@@ -287,7 +288,7 @@ class SampleSquare(object):
     cosine_sim_matrix = k x k numpy array, where k is the number of flight paths and the entries are 
     cosine similarities between their normal vectors.
     '''
-    def __init__(self, flight_list_laefer, flight_list_nyc=None ,x=None, y=None, feet_from_point=None):
+    def __init__(self, flight_list_laefer, flight_list_nyc=None,flight_list_usgs=None, x=None, y=None, feet_from_point=None):
         self.x = x
         self.y = y
         self.feet_from_point = feet_from_point
@@ -302,6 +303,12 @@ class SampleSquare(object):
             self.cosine_sim_matrix_nyc = self.cosine_sim_internal(self.flight_list_nyc)   
             self.phi_nyc_total = self.phi_internal(self.flight_list_nyc,sample=False)
             self.phi_nyc_sample = self.phi_internal(self.flight_list_nyc,sample=True)
+        if flight_list_usgs:
+            self.flight_list_usgs = flight_list_usgs
+            self.delta_h_matrix_usgs = self.delta_h_internal(self.flight_list_usgs)
+            self.cosine_sim_matrix_usgs = self.cosine_sim_internal(self.flight_list_usgs)   
+            self.phi_usgs_total = self.phi_internal(self.flight_list_usgs,sample=False)
+            self.phi_usgs_sample = self.phi_internal(self.flight_list_usgs,sample=True)
 
         
     def delta_h_internal(self,flight_list):
