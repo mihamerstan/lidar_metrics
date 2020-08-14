@@ -33,20 +33,29 @@ def scale_and_offset(df,header,append_to_df=False):
     else:
         return scaled_xyz
 
-def create_df_pickle(file_dir,filename,column_names):
+def read_las_file(file_dir,filename,column_names):
+    '''
+    takes .las file as input, generates dataframe
+    Inputs:
+    file_dir, filename: corresponding to the .las file
+    columns_names: dependent on the LAS version
+    
+    Output:
+    df: Dataframe containing original columns plus scaled xyz coords
+    '''
     inFile = File(file_dir+filename, mode='r')
     raw = inFile.get_points()
     df = raw_to_df(raw,column_names)
     df = scale_and_offset(df,inFile.header,append_to_df=True)
-    pickle_name = 'las_points_'+filename[34:40]+'.pkl'
-    df.to_pickle(file_dir + pickle_name)
+    return df
 
 def create_df_hd5(file_dir,filename,column_names):
     inFile = File(file_dir+filename, mode='r')
     raw = inFile.get_points()
     df = raw_to_df(raw,column_names)
+    del(raw)
     df = scale_and_offset(df,inFile.header,append_to_df=True)
-    hdf_name = 'las_points_'+filename[9:-4]+'.lz'
+    hdf_name = 'las_points_'+filename[2:15]+'.lz'
     df.to_hdf(file_dir + hdf_name,key='df',complevel=1,complib='lzo')
 #    return df
 
@@ -126,7 +135,7 @@ def grab_points_big_rect(pt_files,file_dir,uv_inv,w):
 
 
 
-def plane_fit(square_points):
+def plane_fit(square_points,norm_vector_full=None,shift=None):
     '''
     Fits a plane via SVD to the provided points.
     Input: 
@@ -134,7 +143,8 @@ def plane_fit(square_points):
     Output: 
         normal vector - normal vector to plane fitted via MLS (3x1 numpy array)
         points - provided x,y,z points with zero mean (n x 3 numpy array)
-        square_points - returns the dataframe with 'dist_from_plane' appended (n x 4+ dataframe)
+        square_points - returns the dataframe with 'dist_from_plane' and 'dist_from_full_plane' 
+        appended (n x 4+ dataframe)
         pts_on_plane - projection of x,y,z points onto the fitted plane (n x 3 numpy array)
     '''
     
@@ -150,6 +160,14 @@ def plane_fit(square_points):
     pts_on_plane = points - proj_on_norm.T
     square_points.loc[:,'dist_from_plane'] = dist_from_plane
     
+    # dist_from_full_plane is the projection onto the plane fitted to all flight passes, not just this one
+    try:
+        if not norm_vector_full:
+            square_points.loc[:,'dist_from_full_plane'] = square_points['dist_from_plane'].copy()
+    except ValueError:
+        dist_from_full_plane = [np.dot(point-shift, norm_vector_full) for point in raw_points.T]
+        square_points.loc[:,'dist_from_full_plane'] = dist_from_full_plane
+
     return norm_vector,points,square_points,pts_on_plane
 
 def prep_square_for_plotting(square_points,min_list=None):
@@ -263,24 +281,35 @@ class FlightPath(object):
     Attributes:
     flight_id - integer identifier of the flight (typically 0-40)
     norm_vector - 3x1 numpy array of the xyz coordinates of the norm vector
-    avg_dist_from_plane - scalar average distance from fitted plane (fitted over all flight paths)
+    avg_dist_from_plane - scalar average distance from fitted plane (plane fitted over all flight paths)
         for all points in the flight path
     
     '''
-    def __init__(self,flight_id,norm_vector,avg_dist_from_plane=None):
+    def __init__(self,flight_id,norm_vector,square_points,avg_dist_from_plane=None):
         self.flight_id = flight_id
         self.norm_vector = norm_vector
-        self.avg_dist_from_plane = avg_dist_from_plane
+        self.avg_dist_from_plane = avg_dist_from_plane # Probably can remove
+        self.num_points = square_points.shape[0]
+        self.sd_dist = self.sd_dist_from_plane_f(square_points)
+        self.h = self.calculate_h(square_points)
+        self.square_dist = self.square_dist_from_plane(square_points)
     
-    def sd_dist_from_plane(self,square_points):
-        self.sd_dist = np.std(square_points['dist_from_plane'])
+    # Calculate h = mean "height" from plane of all flight passes
+    def calculate_h(self,square_points):
+        return np.mean(square_points['dist_from_full_plane'])
+
+    def sd_dist_from_plane_f(self,square_points):
+        return np.std(square_points['dist_from_full_plane'])
+
+    def square_dist_from_plane(self,square_points):
+        return np.sum(square_points['dist_from_full_plane']**2)
 
 class SampleSquare(object):
     '''
     Object to store all statistics for one sample square.
     
     Attributes:
-    x,y - scalar coordinates of center point defining the square
+    x,y,z - scalar coordinates of center point defining the square
     feet_from_point - scalar 1/2 length of one side of square
     nyc_/laefer_ flight_list - list of FlightPath objects from nyc or laefer dataset
     delta_h_matrix - k x k numpy array, where k is the number of flight paths and the entries are the difference
@@ -288,30 +317,69 @@ class SampleSquare(object):
     cosine_sim_matrix = k x k numpy array, where k is the number of flight paths and the entries are 
     cosine similarities between their normal vectors.
     '''
-    def __init__(self, flight_list_laefer, flight_list_nyc=None,flight_list_usgs=None, x=None, y=None, feet_from_point=None):
+    def __init__(self, flight_list_laefer, flight_list_nyc=None,flight_list_usgs=None, x=None, y=None, z=None, feet_from_point=None):
         self.x = x
         self.y = y
+        self.z = z
         self.feet_from_point = feet_from_point
-        self.flight_list_laefer = flight_list_laefer
-        self.delta_h_matrix_laefer = self.delta_h_internal(self.flight_list_laefer)
-        self.cosine_sim_matrix_laefer = self.cosine_sim_internal(self.flight_list_laefer)
-        self.phi_laefer_total = self.phi_internal(self.flight_list_laefer,sample=False)
-        self.phi_laefer_sample = self.phi_internal(self.flight_list_laefer,sample=True)
+        # 2019 scan
+        if flight_list_laefer:
+            self.flight_list_laefer = flight_list_laefer
+            # PROBABLY DELETE THESE 3 Delta H from Latypov(2002)
+            # self.delta_h_matrix_laefer = self.delta_h_matrix_f(self.flight_list_laefer)
+            # self.delta_h_mean_laefer = self.delta_h_mean_f(self.delta_h_matrix_laefer)
+            # self.delta_h_sd_laefer = self.delta_h_sd_f(self.delta_h_matrix_laefer)
+            # Cross-pass (C) and within-pass (W) error
+            self.error_decomp_laefer = self.error_decomp_f(self.flight_list_laefer)
+            self.cosine_sim_matrix_laefer = self.cosine_sim_matrix_f(self.flight_list_laefer)
+            self.cosine_sim_mean_laefer = self.cosine_sim_mean_f(self.cosine_sim_matrix_laefer)
+            self.cosine_sim_sd_laefer = self.cosine_sim_sd_f(self.cosine_sim_matrix_laefer)        
+            self.phi_laefer_total = self.phi_internal(self.flight_list_laefer,sample=False)
+            self.phi_laefer_sample = self.phi_internal(self.flight_list_laefer,sample=True)
+        else:
+            pass
+        # 2017 scan
         if flight_list_nyc:
             self.flight_list_nyc = flight_list_nyc
-            self.delta_h_matrix_nyc = self.delta_h_internal(self.flight_list_nyc)
-            self.cosine_sim_matrix_nyc = self.cosine_sim_internal(self.flight_list_nyc)   
+            # self.delta_h_matrix_nyc = self.delta_h_matrix_f(self.flight_list_nyc)
+            # self.delta_h_mean_nyc = self.delta_h_mean_f(self.delta_h_matrix_nyc)
+            # self.delta_h_sd_nyc = self.delta_h_sd_f(self.delta_h_matrix_nyc)
+            self.error_decomp_nyc = self.error_decomp_f(self.flight_list_nyc)
+            self.cosine_sim_matrix_nyc = self.cosine_sim_matrix_f(self.flight_list_nyc)
+            self.cosine_sim_mean_nyc = self.cosine_sim_mean_f(self.cosine_sim_matrix_nyc)
+            self.cosine_sim_sd_nyc = self.cosine_sim_sd_f(self.cosine_sim_matrix_nyc)
             self.phi_nyc_total = self.phi_internal(self.flight_list_nyc,sample=False)
             self.phi_nyc_sample = self.phi_internal(self.flight_list_nyc,sample=True)
+        else:
+            pass
+        # 2014 scan    
         if flight_list_usgs:
             self.flight_list_usgs = flight_list_usgs
-            self.delta_h_matrix_usgs = self.delta_h_internal(self.flight_list_usgs)
-            self.cosine_sim_matrix_usgs = self.cosine_sim_internal(self.flight_list_usgs)   
+            # self.delta_h_matrix_usgs = self.delta_h_matrix_f(self.flight_list_usgs)
+            # self.delta_h_mean_usgs = self.delta_h_mean_f(self.delta_h_matrix_usgs)
+            # self.delta_h_sd_usgs = self.delta_h_sd_f(self.delta_h_matrix_usgs)
+            self.error_decomp_usgs = self.error_decomp_f(self.flight_list_usgs)
+            self.cosine_sim_matrix_usgs = self.cosine_sim_matrix_f(self.flight_list_usgs)
+            self.cosine_sim_mean_usgs = self.cosine_sim_mean_f(self.cosine_sim_matrix_usgs)
+            self.cosine_sim_sd_usgs = self.cosine_sim_sd_f(self.cosine_sim_matrix_usgs)
+               
             self.phi_usgs_total = self.phi_internal(self.flight_list_usgs,sample=False)
             self.phi_usgs_sample = self.phi_internal(self.flight_list_usgs,sample=True)
+        else:
+            pass
+    
+    def error_decomp_f(self,flight_list):
+        # Calculates the cross-pass, within-pass, and RMSE error for a particular SampleSquare and flight_list
+        C2,W2 = 0,0
+        for i,flight_i in enumerate(flight_list[2:]): # Skip total and sampled
+            C2 += flight_i.num_points*(flight_i.h**2) / flight_list[0].num_points
+            W2 += flight_i.num_points*(flight_i.sd_dist**2) / flight_list[0].num_points
+        rmse = np.sqrt(C2+W2)
+        C = np.sqrt(C2)
+        W = np.sqrt(W2)
+        return (C,W,rmse)
 
-        
-    def delta_h_internal(self,flight_list):
+    def delta_h_matrix_f(self,flight_list):
         # Calculates difference in avg dist from plane for all flight path pairs, returns a matrix
         delta_h_matrix = np.zeros((len(flight_list)-2,len(flight_list)-2))
         for i,flight_i in enumerate(flight_list[2:]): # Skip total and sampled
@@ -319,14 +387,66 @@ class SampleSquare(object):
                 delta_h_matrix[i,j] = abs(flight_i.avg_dist_from_plane - flight_j.avg_dist_from_plane)
         return delta_h_matrix
 
-    def cosine_sim_internal(self,flight_list):
+    def delta_h_mean_f(self,dh_matrix):
+        # Calculate the mean difference in dist_from_plane for all passes in the SampleSquare
+        if dh_matrix.shape[0] == 1:
+            return 0
+        else:
+            dh = []
+            for i,m in enumerate(dh_matrix):
+                for j,f in enumerate(m):
+                    if i != j:
+                        dh.append(f)
+            delta_h_mean = np.mean(abs(np.array(dh)))
+            return delta_h_mean
+
+    def delta_h_sd_f(self,dh_matrix):
+        # Calculate the SD difference in dist_from_plane for all passes in the SampleSquare
+        if dh_matrix.shape[0] == 1:
+            return 0
+        else:
+            dh = []
+            for i,m in enumerate(dh_matrix):
+                for j,f in enumerate(m):
+                    if i != j:
+                        dh.append(f)
+            delta_h_sd = np.std(abs(np.array(dh)))
+            return delta_h_sd
+
+    def cosine_sim_matrix_f(self,flight_list):
         # Calculates cosine similarity for normal vectors of all flight path pairs, returns a matrix
         cosine_sim_matrix = np.zeros((len(flight_list)-2,len(flight_list)-2))
         for i,flight_i in enumerate(flight_list[2:]): # Skip total and sampled
             for j,flight_j in enumerate(flight_list[2:]): # Skip total and sampled
                 cosine_sim_matrix[i,j] = flight_i.norm_vector @ flight_j.norm_vector
         return cosine_sim_matrix
-    
+
+    def cosine_sim_mean_f(self,cosine_sim_matrix):
+        # Calculate the mean difference in cosine similarity for fitted planes of all passes in the SampleSquare
+        if cosine_sim_matrix.shape[0] == 1:
+            return 0
+        else:
+            cs = []
+            for i,m in enumerate(cosine_sim_matrix):
+                for j,f in enumerate(m):
+                    if i != j:
+                        cs.append(f)
+            cosine_sim_mean = np.mean(abs(np.array(cs)))
+            return cosine_sim_mean
+
+    def cosine_sim_sd_f(self,cosine_sim_matrix):
+        # Calculate the SD difference in cosine similarity for fitted planes of all passes in the SampleSquare
+        if cosine_sim_matrix.shape[0] == 1:
+            return 0
+        else:
+            cs = []
+            for i,m in enumerate(cosine_sim_matrix):
+                for j,f in enumerate(m):
+                    if i != j:
+                        cs.append(f)
+            cosine_sim_sd = np.std(abs(np.array(cs)))
+            return cosine_sim_sd
+
     def phi_internal(self,flight_list,sample=False):
         avg_flight_paths = np.mean([flight.sd_dist for flight in flight_list[2:]])
         if sample:
@@ -341,7 +461,8 @@ class SampleSquare(object):
 def center_point_sample(num_points,
                         bottom_left_pt,top_left_pt,bottom_right_pt=None,
                         u_length=800,v_length=-80,
-                        border=[0.05,0.05]):
+                        border=[0.05,0.05],
+                        seed = 27):
     '''
     Function returns random samples (num_points of them) within the rectangle defined by the points and lengths.
     
@@ -356,7 +477,8 @@ def center_point_sample(num_points,
     Output:
     num_points x 2 numpy array of (x,y) values
     '''  
-    
+    np.random.seed(seed)
+
     unit_u = (top_left_pt - bottom_left_pt)/np.linalg.norm(top_left_pt-bottom_left_pt)
     unit_v = (bottom_right_pt - bottom_left_pt)/np.linalg.norm(bottom_right_pt - bottom_left_pt)
     u = unit_u*u_length
@@ -372,8 +494,8 @@ def center_point_sample(num_points,
 
 def create_flight_list(square_points):
     '''
-    flight_list creates a list of FlightPath objects, 
-    1 for each unique flight_id plus 2 more (total and total_sampled).
+    create_flight_list creates a list of FlightPath objects, 
+    1 for each unique flight_id plus 2 more (total and total_sampled). This is an input to SampleSquare.
     FlightPath object contains flight_id, norm_vector, std deviation of point distance from fitted plane.
     flight_id = -100: Full dataset
     flight_id = -200: Full dataset, sampled to the avg number of points in a single flight path
@@ -389,30 +511,37 @@ def create_flight_list(square_points):
     flight_list = []
 
     # Full dataset
-    norm_vector,_,square_points_total,_ = plane_fit(square_points)
-    flightpath = FlightPath(-100,norm_vector)
-    flightpath.sd_dist_from_plane(square_points_total)
+    norm_vector_full,_,square_points_total,_ = plane_fit(square_points)
+    shift = np.array(square_points[['x_scaled','y_scaled','z_scaled']]).mean(axis=0)
+
+    flightpath = FlightPath(-100,norm_vector_full,square_points_total)
+    # flightpath.sd_dist_from_plane(square_points_total)
     flight_list.append(flightpath)
 
+    # # Print the total RMSE_S
+    # rmse = np.sqrt(np.sum(square_points_total['dist_from_full_plane']**2)/square_points_total.shape[0])
+    # print("RMSE: ",rmse)
     # Full dataset, sampled down
     flight_count = len(square_points['flight_id'].unique())
     density = square_points.shape[0] / flight_count
     square_points_sampled = square_points.sample(n=int(density))
 
     norm_vector,_,square_points_sample,_ = plane_fit(square_points_sampled)
-    flightpath = FlightPath(-200,norm_vector)
-    flightpath.sd_dist_from_plane(square_points_sampled)
+    flightpath = FlightPath(-200,norm_vector,square_points_sampled)
+    # flightpath.sd_dist_from_plane(square_points_sampled)
     flight_list.append(flightpath)
 
 
     for flight_id in square_points['flight_id'].unique():
         # Avg distance from total point cloud plane - filtering square_points_total
-        avg_dist_from_plane = square_points_total[square_points_total['flight_id']==flight_id]['dist_from_plane'].mean()
+        avg_dist_from_plane = square_points_total[square_points_total['flight_id']== \
+                                                flight_id]['dist_from_plane'].mean()
 
         norm_vector,_,square_points_flight,_ = plane_fit( \
-                                               square_points[square_points['flight_id']==flight_id])
-        flightpath = FlightPath(flight_id,norm_vector,avg_dist_from_plane)
-        flightpath.sd_dist_from_plane(square_points_flight)
+                                               square_points[square_points['flight_id']==flight_id], \
+                                               norm_vector_full,shift)
+        flightpath = FlightPath(flight_id,norm_vector,square_points_flight,avg_dist_from_plane)
+        # flightpath.sd_dist_from_plane(square_points_flight)
         flight_list.append(flightpath)       
-        
+
     return flight_list

@@ -352,10 +352,11 @@ class Waves(object):
 
             sample_record = sample_records[key]           
             duration_anchor = struct.unpack("=L", wavebinary.read(old_div(sample_record.bits_anchor,8)))[0]   
+            print("Key {} Duration Anchor: {}".format(key,duration_anchor))
             num_samples = struct.unpack("=h", wavebinary.read(old_div(sample_record.bits_samples,8)))[0] 
-            print("bits per sample: ",sample_record.bits_per_sample)
-            print("num samples: ",num_samples)
-            print("bits anchor: ",sample_record.bits_anchor)
+            #print("bits per sample: ",sample_record.bits_per_sample)
+            #print("num samples: ",num_samples)
+            #print("bits anchor: ",sample_record.bits_anchor)
             samples= []
             for sample_num in range(num_samples):                 
                 #sample = struct.unpack("=h", wavebinary.read(old_div(sample_record.bits_per_sample,8)))[0]
