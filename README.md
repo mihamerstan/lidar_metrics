@@ -1,5 +1,6 @@
 # lidar_fwf
-Tooling used for the paper [Metrics for Aerial, Urban LiDAR Point Clouds](https://arxiv.org/abs/2010.09951)
+Tooling used for the paper [Metrics for Aerial, Urban LiDAR Point Clouds](https://arxiv.org/abs/2010.09951).  
+
 Python3 tools for full waveform lidar processing.  Based on pypwaves (see below) but ported to python 3 and expanded to cover more of the Pulsewaves spec.
 
 # Resources:
