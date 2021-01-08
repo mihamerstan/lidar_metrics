@@ -13,7 +13,7 @@ Tooling used for the paper [Metrics for Aerial, Urban LiDAR Point Clouds](https:
  * [fig12_mean_ortho_offset.ipynb](https://github.com/mihamerstan/lidar_fwf/blob/master/notebooks/fig12_mean_ortho_offset.ipynb): Generates figure 12 in the paper.
  * [num_flights_nyc.ipynb](https://github.com/mihamerstan/lidar_fwf/blob/master/notebooks/num_flights_nyc.ipynb): This notebook identifies and appends flight IDs for the NYC 2017 dataset based on time gaps between points.
  * [num_flights_usgs.ipynb](https://github.com/mihamerstan/lidar_fwf/blob/master/notebooks/num_flights_usgs.ipynb): This notebook identifies and appends flight IDs for the USGS dataset based on time gaps between points.
-   * [projected_overall_density.ipynb](https://github.com/mihamerstan/lidar_fwf/blob/master/notebooks/projected_overall_density.ipynb): Calculates projected density for a given LAS file.
+ * [projected_overall_density.ipynb](https://github.com/mihamerstan/lidar_fwf/blob/master/notebooks/projected_overall_density.ipynb): Calculates projected density for a given LAS file.
 
 # Other Python LiDAR Resources:
 Pulsewaves specification: https://github.com/PulseWaves/Specification/blob/master/specification.rst
