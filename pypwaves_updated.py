@@ -291,6 +291,33 @@ class PulseRecord(object):
         self.dy = old_div((self.y_target - self.y_anchor),1000)
         self.dz = old_div((self.z_target - self.z_anchor),1000)
         
+    def table_to_dict(self):
+        pulse_record_attrs = ['gps_timestamp', 
+                                'offset_to_waves', 
+                                'x_anchor', 
+                                'y_anchor', 
+                                'z_anchor', 
+                                'x_target', 
+                                'y_target', 
+                                'z_target', 
+                                'first_return', 
+                                'last_return', 
+                                'pulse_number', 
+                                'pulse_descriptor', 
+                                'reserved', 
+                                'edge', 
+                                'scan_direction', 
+                                'facet', 
+                                'intensity', 
+                                'classification', 
+                                'dx', 
+                                'dy', 
+                                'dz']
+        attr_dict = {}
+        for attr in pulse_record_attrs:
+            attr_dict[attr] = getattr(self,attr)
+        return attr_dict
+
 
     def print_table(self):
         pulse_record_attrs = ['gps_timestamp', 
@@ -352,7 +379,7 @@ class Waves(object):
 
             sample_record = sample_records[key]           
             duration_anchor = struct.unpack("=L", wavebinary.read(old_div(sample_record.bits_anchor,8)))[0]   
-            print("Key {} Duration Anchor: {}".format(key,duration_anchor))
+            # print("Key {} Duration Anchor: {}".format(key,duration_anchor))
             num_samples = struct.unpack("=h", wavebinary.read(old_div(sample_record.bits_samples,8)))[0] 
             #print("bits per sample: ",sample_record.bits_per_sample)
             #print("num samples: ",num_samples)

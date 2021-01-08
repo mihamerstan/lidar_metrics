@@ -73,6 +73,20 @@ def label_returns(las_df):
     first_return_df = first_return_df.reset_index(drop=True)
     return first_return_df, las_df
 
+def calc_bottom_right_pt(top_left_pt,bottom_left_pt,other_pt):
+    '''
+    Given the top left point, bottom left point and one other point on plane,
+    function returns the bottom right point, at a right angle.
+    Inputs - all (3,) numpy arrays
+    Output - (3,) numpy array
+    '''
+    v1 = top_left_pt - bottom_left_pt
+    v2 = other_pt - top_left_pt
+    norm = np.cross(v1,v2) / np.linalg.norm(np.cross(v1,v2))
+    bottom_vec = np.cross(norm,v1) / np.linalg.norm(np.cross(norm,v1))
+    brp = bottom_vec*v_length + bottom_left_pt
+    return brp
+
 # Load pickle, extract points around square, iterate
 def grab_points(pt_files,file_dir,pt_x,pt_y,feet_from_point):
     '''
@@ -133,7 +147,29 @@ def grab_points_big_rect(pt_files,file_dir,uv_inv,w):
     print("Total point count in square: {:d}".format(rectangle_points.shape[0]))
     return rectangle_points
 
-
+def rectangle(pt1,pt2,y_length,x_length):
+    '''
+    Function returns uv_inv and w, for use in selecting points within the rectangle
+    Note: This function only works in 2D (horizontal plane)
+    Inputs:
+    pt1 - 2x1 numpy array with x and y coordinate for bottom point
+    pt2 - 2xy numpy array with x and y coordinate for top point
+    y_length - bottom-to-top length (positive is in direction of top from bottom point)
+    x_length - left-to-right length (positive means pts are on left border, negative means they're on right)
+    Outputs:
+    uv_inv: 2xy numpy array - u and v are the sides of the rectangle.  uv = [u v] is a matrix with u and v as columns.
+    w: 2x1 numpy array with (x,y) coordinates of reference (bottom) point.
+    
+    Reference: https://math.stackexchange.com/questions/190111/how-to-check-if-a-point-is-inside-a-rectangle
+    '''
+    unit_u = (pt2 - pt1)/np.linalg.norm(pt2-pt1)
+    unit_v = np.array([unit_u[1],-1*unit_u[0]])
+    u = unit_u*y_length
+    v = unit_v*x_length
+    uv = np.array([u,v]).T
+    uv_inv = np.linalg.inv(uv)
+    w = pt1
+    return uv_inv,w,unit_u,unit_v
 
 def plane_fit(square_points,norm_vector_full=None,shift=None):
     '''
@@ -268,8 +304,6 @@ def in_vertical_square(square_points,norm_vector,center_pt,horizontal_feet_from_
     #print("Vertical density: {:2.3f} pts/sqft".format(density))
     #print("Rectangle area: {} sqft".format(rect_area))
     return vertical_square,density
-
-
 
 
 ### CLASSES FOR STATISTICAL SAMPLING
@@ -483,8 +517,8 @@ def center_point_sample(num_points,
     unit_v = (bottom_right_pt - bottom_left_pt)/np.linalg.norm(bottom_right_pt - bottom_left_pt)
     u = unit_u*u_length
     v = unit_v*v_length
-    uv = np.array([u,v]).T # Why the transpose?
-            
+    uv = np.array([u,v]).T # Why the transpose? 
+           
     w = bottom_left_pt
     # Select random point on unit square within border
     border = np.array(border)
