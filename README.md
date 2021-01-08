@@ -1,4 +1,4 @@
-# lidar_fwf
+# lidar_metrics
 Tooling used for the paper [Metrics for Aerial, Urban LiDAR Point Clouds](https://arxiv.org/abs/2010.09951).  
 
 # File Descriptions
