@@ -6,9 +6,6 @@ import pandas as pd
 from scipy import stats
 from laspy.file import File
 import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d
-import plotly.graph_objects as go
-import plotly.express as px
 
 def raw_to_df(raw,column_names):
     '''function takes raw output of laspy.File.get_points() and column names, and returns a pandas Dataframe'''
